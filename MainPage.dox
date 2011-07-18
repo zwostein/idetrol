@@ -1,0 +1,12 @@
+/**
+\mainpage Introduction
+\section desc_sec Short Description
+\e IDETrol is an experimental framework to control \e ATA/ATAPI devices, using an \e ATMega32 (and similar) microcontroller.\n
+Currently, only \e CD-ROM drives are supported.
+\section deps_sec Dependencies
+For building this software you'll need:\n
+\li An \e Atmel \e AVR microcontroller (currently only tested on the \e Mega32)
+\li The toolchain: \e avr-binutils, \e avr-gcc and \e avr-libc
+\li \e AVRDUDE or some other tool for uploading the code to the device
+\li \e Doxygen if you'd like to generate these docs
+**/
