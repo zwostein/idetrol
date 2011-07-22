@@ -213,7 +213,7 @@
 ////////////////////////////////////////////////////////////////
 // other stuff
 
-#define ATA_WAITNOTBUSY_DEFAULT_TIMEOUT		128
+#define ATA_WAITNOTBUSY_DEFAULT_TIMEOUT		160
 
 typedef uint32_t ata_lba_t;
 

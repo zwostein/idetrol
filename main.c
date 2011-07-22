@@ -140,11 +140,13 @@ int main( void )
 	if( !ata_init() )
 	{
 		printf_P( PSTR("ATA Initialization failed\n") );
+		_delay_ms(1000);
 		return 1;
 	}
 	if( !atapi_init() )
 	{
 		printf_P( PSTR("ATAPI Initialization failed\n") );
+		_delay_ms(1000);
 		return 1;
 	}
 
@@ -177,7 +179,7 @@ int main( void )
 				atapi_readSubChannel_currentPositionMSF_t current;
 				atapi_readSubChannel_currentPositionMSF( &current );
 				if( last.absolute.seconds!=current.absolute.seconds || last.relative.seconds!=current.relative.seconds )
-					printf_P( PSTR("Index %02d   Track %02d   Absolute %02d:%02d:%02d   Relative %02d:%02d:%02d   State 0x%02X   QBitADRControl: 0x%X\r"), current.index, current.track, current.absolute.minutes, current.absolute.seconds, current.absolute.frames, current.relative.minutes, current.relative.seconds, current.relative.frames, current.audioStatus, current.qBitADRControl );
+					printf_P( PSTR("Track %02d   Absolute %02d:%02d:%02d   Relative %02d:%02d:%02d   State 0x%02X   QBitADRControl: 0x%X\r"), current.track, current.absolute.minutes, current.absolute.seconds, current.absolute.frames, current.relative.minutes, current.relative.seconds, current.relative.frames, current.audioStatus, current.qBitADRControl );
 				last = current;
 			}
 			else
@@ -195,38 +197,57 @@ int main( void )
 				case 53:
 					if( irmp_data.flags & IRMP_FLAG_REPETITION )
 						break;
+					printf_P( PSTR("Play\n") );
 					play( trackList, numTracks, firstTrackNum, NULL );
 					break;
 				case 48:
 					if( irmp_data.flags & IRMP_FLAG_REPETITION )
 						break;
+					printf_P( PSTR("Pause\n") );
 					pause();
 					break;
 				case 54:
 					if( irmp_data.flags & IRMP_FLAG_REPETITION )
 						break;
+					printf_P( PSTR("Stop\n") );
 					stop();
 					break;
 				case 36:
 					if( irmp_data.flags & IRMP_FLAG_REPETITION )
 						break;
+					printf_P( PSTR("Previous\n") );
 					previous( trackList, numTracks, firstTrackNum );
 					break;
 				case 30:
 					if( irmp_data.flags & IRMP_FLAG_REPETITION )
 						break;
+					printf_P( PSTR("Next\n") );
 					next( trackList, numTracks, firstTrackNum );
 					break;
 				case 52:
+					printf_P( PSTR("FastForward\n") );
 					forward( trackList, numTracks, firstTrackNum, 5 );
 					break;
 				case 50:
+					printf_P( PSTR("FastRewind\n") );
 					rewind( trackList, numTracks, firstTrackNum, 5 );
 					break;
 				case 55:
 					if( irmp_data.flags & IRMP_FLAG_REPETITION )
 						break;
-					loadEject();
+					static bool toggle = false;
+					if( toggle || atapi_testUnitReady() )
+					{
+						printf_P( PSTR("Eject\n") );
+						atapi_startStopUnit( ATAPI_STARTSTOPUNIT_LOEJ );
+						toggle = false;
+					}
+					else
+					{
+						printf_P( PSTR("Load\n") );
+						atapi_startStopUnit( ATAPI_STARTSTOPUNIT_LOEJ | ATAPI_STARTSTOPUNIT_START );
+						toggle = true;
+					}
 					break;
 			}
 		}

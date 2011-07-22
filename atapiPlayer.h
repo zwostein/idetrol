@@ -42,7 +42,6 @@ void forward( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firs
 void rewind( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum, uint8_t seconds );
 void next( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum );
 void previous( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum );
-void loadEject( void );
 
 
 #endif

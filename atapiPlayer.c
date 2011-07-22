@@ -20,12 +20,6 @@
 
 #include "atapiPlayer.h"
 
-#include <avr/pgmspace.h>
-
-#include <string.h>
-#include <stdio.h>
-#include <stdlib.h>
-
 
 int8_t thisTrack( const atapi_trackMSF_t * trackList, int8_t numTracks, int8_t firstTrackNum )
 {
@@ -93,26 +87,23 @@ int8_t lastNonAudioTrack( const atapi_trackMSF_t * trackList, uint8_t numTracks,
 
 void play( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum, atapi_msf_t * start )
 {
-	static atapi_msf_t current = { 0xff, 0xff, 0xff };
+	static const atapi_msf_t current = { 0xff, 0xff, 0xff };
 	atapi_msf_t end;
 	lastNonAudioTrack( trackList, numTracks, firstTrackNum, &end );
 	if( !start )
 		start = &current;
-	printf_P( PSTR("Play from %02d:%02d:%02d to %02d:%02d:%02d\n"), start->minutes, start->seconds, start->frames , end.minutes, end.seconds, end.frames );
 	atapi_playAudioMSF( start, &end );
 }
 
 
 void pause( void )
 {
-	printf_P( PSTR("Pause\n") );
 	atapi_startStopUnit( 0 );
 }
 
 
 void stop( void )
 {
-	printf_P( PSTR("Stop\n") );
 	atapi_lba_t beginning = 0;
 	if( !atapi_seek( &beginning ) )
 		return;
@@ -123,7 +114,6 @@ void stop( void )
 
 void forward( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum, uint8_t seconds )
 {
-	printf_P( PSTR("FastForward\n") );
 	atapi_readSubChannel_currentPositionMSF_t current;
 	atapi_readSubChannel_currentPositionMSF( &current );
 	if( current.absolute.seconds >= 60-seconds )
@@ -141,7 +131,6 @@ void forward( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firs
 
 void rewind( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum, uint8_t seconds )
 {
-	printf_P( PSTR("FastRewind\n") );
 	atapi_readSubChannel_currentPositionMSF_t current;
 	atapi_readSubChannel_currentPositionMSF( &current );
 	if( current.absolute.seconds < seconds )
@@ -166,7 +155,6 @@ void rewind( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t first
 
 void next( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum )
 {
-	printf_P( PSTR("Next\n") );
 	atapi_readSubChannel_currentPositionMSF_t current;
 	atapi_readSubChannel_currentPositionMSF( &current );
 	if( !(current.audioStatus == ATAPI_READSUBCHANNEL_AUDIOSTATUS_PLAYING || current.audioStatus == ATAPI_READSUBCHANNEL_AUDIOSTATUS_PAUSED) )
@@ -180,7 +168,6 @@ void next( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTr
 
 void previous( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTrackNum )
 {
-	printf_P( PSTR("Previous\n") );
 	atapi_readSubChannel_currentPositionMSF_t current;
 	atapi_readSubChannel_currentPositionMSF( &current );
 	if( !(current.audioStatus == ATAPI_READSUBCHANNEL_AUDIOSTATUS_PLAYING || current.audioStatus == ATAPI_READSUBCHANNEL_AUDIOSTATUS_PAUSED) )
@@ -189,18 +176,4 @@ void previous( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t fir
 	if( previousAudioTrack( trackList, numTracks, firstTrackNum, &start )<0 )
 		return;
 	play( trackList, numTracks, firstTrackNum, &start );
-}
-
-
-void loadEject( void )
-{
-	printf_P( PSTR("Load/Eject\n") );
-	if( atapi_testUnitReady() )
-	{
-		atapi_startStopUnit( ATAPI_STARTSTOPUNIT_LOEJ );
-	}
-	else
-	{
-		atapi_startStopUnit( ATAPI_STARTSTOPUNIT_LOEJ | ATAPI_STARTSTOPUNIT_START );
-	}
 }
