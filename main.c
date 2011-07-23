@@ -146,6 +146,7 @@ int main( void )
 	if( !atapi_init() )
 	{
 		printf_P( PSTR("ATAPI Initialization failed\n") );
+		ata_printRegisters();
 		_delay_ms(1000);
 		return 1;
 	}

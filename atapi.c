@@ -614,28 +614,53 @@ bool atapi_identifyPacketDevice( atapi_device_information_t * info )
 }
 
 
-bool atapi_init( void )
+static bool atapi_isValidDevice( void )
 {
 	uint16_t cylinders = ata_read8( ATA_CYLINDERLOW_REG ) | ( ata_read8( ATA_CYLINDERHIGH_REG ) << 8 );
-	if( cylinders != ATAPI_MAGICNUMBER )
+	return cylinders == ATAPI_MAGICNUMBER;
+}
+
+
+static bool atapi_initDevice( void )
+{
+	if( !atapi_isValidDevice() )
 	{
-		printf_P( PSTR("No ATAPI device detected\n") );
+		printf_P( PSTR("No device detected\n") );
 		return false;
 	}
 
 	atapi_device_information_t info;
 	if( !atapi_identifyPacketDevice( &info ) )
 	{
-		printf_P( PSTR("Could not identify ATAPI device\n") );
+		printf_P( PSTR("Could not identify device\n") );
 		return false;
 	}
 
-	printf_P( PSTR("\nDevice Information:\n") );
+	printf_P( PSTR("Device Information:\n") );
 	printf_P( PSTR(" * Configuration  0x%04X\n"), info.generalConfig );
 	printf_P( PSTR(" * Serial Nr.    \"%s\"\n"), info.serialNumber );
 	printf_P( PSTR(" * Firmware Rev. \"%s\"\n"), info.firmwareRev );
 	printf_P( PSTR(" * Model Nr.     \"%s\"\n"), info.modelNr );
 	printf_P( PSTR(" * Capabilities   0x%02X\n"), info.capabilities );
-	printf_P( PSTR(" * PIO Mode Nr.   0x%02X\n\n"), info.pioModeNr );
+	printf_P( PSTR(" * PIO Mode Nr.   0x%02X\n"), info.pioModeNr );
 	return true;
+}
+
+
+bool atapi_init( void )
+{
+	bool foundMaster;
+	ata_selectDevice( 0 );
+	printf_P( PSTR("ATAPI Master: ") );
+	foundMaster = atapi_initDevice();
+
+	ata_selectDevice( 1 );
+	printf_P( PSTR("ATAPI Slave: ") );
+	if( atapi_initDevice() )
+		return true;
+
+	if( foundMaster )
+		ata_selectDevice( 0 );
+
+	return foundMaster;
 }
