@@ -208,12 +208,18 @@
 #define ATA_COMMAND_IDENTIFYDRIVE		0xEC
 #define ATA_COMMAND_PACKET			0xA0
 #define ATA_COMMAND_IDENTIFYPACKETDEVICE	0xA1
+#define ATA_IDENTIFYPACKETDEVICE_SERIALNUMBER_LEN	20
+#define ATA_IDENTIFYPACKETDEVICE_FIRMWAREREVISION_LEN	8
+#define ATA_IDENTIFYPACKETDEVICE_MODELNUMBER_LEN	40
 
 
 ////////////////////////////////////////////////////////////////
 // other stuff
 
 #define ATA_WAITNOTBUSY_DEFAULT_TIMEOUT		160
+
+////////////////////////////////////////////////////////////////
+// data types
 
 typedef uint32_t ata_lba_t;
 
@@ -235,7 +241,6 @@ void ata_hardReset( void );
 void ata_softReset( void );
 bool ata_init( void );
 void ata_printRegisters( void );
-void ata_printStatus( void );
 
 
 #endif

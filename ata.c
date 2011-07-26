@@ -109,7 +109,7 @@ void ata_write8( uint8_t reg, uint8_t data )
 // returns nonzero if selected device is ready to accept commands
 bool ata_isNotBusy( void )
 {
-	return !( ata_read8( ATA_ALTERNATESTATUS_REG ) & ATA_STATUS_BUSY );
+	return !( ata_read8( ATA_STATUS_REG ) & ATA_STATUS_BUSY );
 }
 
 
@@ -146,17 +146,17 @@ bool ata_waitNotBusy( void )
 // waits for the selected device beeing ready and returns status - aborts on timeout
 bool ata_waitStatusTimeout( uint8_t timeout, uint8_t * status )
 {
-	*status = ata_read8( ATA_ALTERNATESTATUS_REG );
+	*status = ata_read8( ATA_STATUS_REG );
 	if( !( *status & ATA_STATUS_BUSY ) )
 	{
 //		printf_P( PSTR("Waiting for device ... ") );
 		for( uint8_t i=0; i<timeout; i++ )
 		{
-			*status = ata_read8( ATA_ALTERNATESTATUS_REG );
+			*status = ata_read8( ATA_STATUS_REG );
 			if( !( *status & ATA_STATUS_BUSY ) )
 			{
 //				printf_P( PSTR("proceeding\n") );
-				return 1;
+				return true;
 			}
 			_delay_ms( i );
 		}
@@ -239,8 +239,11 @@ bool ata_init( void )
 	setAllInput( ATA_DATAH_DDR );
 	
 	ata_hardReset();
-	_delay_ms(1000);
-	_delay_ms(1000);
+	_delay_ms(2000);
+	ata_selectDevice(0);
+	ata_write8( ATA_DEVICECONTROL_REG, ATA_DEVICECONTROL_IEN );
+	ata_selectDevice(1);
+	ata_write8( ATA_DEVICECONTROL_REG, ATA_DEVICECONTROL_IEN );
 	ata_selectDevice(0);
 
 	return true;
@@ -251,18 +254,11 @@ void ata_printRegisters( void )
 {
 	ata_waitNotBusy();
 	printf_P( PSTR("\nCurrent Register:\n") );
-	printf_P( PSTR(" * ATA_DEVICEHEAD_REG: 0x%X\n"), ata_read8( ATA_DEVICEHEAD_REG ) );
-	printf_P( PSTR(" * ATA_STATUS_REG: 0x%X\n"), ata_read8( ATA_STATUS_REG ) );
-	printf_P( PSTR(" * ATA_ERROR_REG: 0x%X\n"), ata_read8( ATA_ERROR_REG ) );
-	printf_P( PSTR(" * ATA_CYLINDERLOW_REG: 0x%X\n"), ata_read8( ATA_CYLINDERLOW_REG ) );
-	printf_P( PSTR(" * ATA_CYLINDERHIGH_REG: 0x%X\n"), ata_read8( ATA_CYLINDERHIGH_REG ) );
-	printf_P( PSTR(" * ATA_SECTORCOUNT_REG: 0x%X\n"), ata_read8( ATA_SECTORCOUNT_REG ) );
-	printf_P( PSTR(" * ATA_SECTORNUMBER_REG: 0x%X\n"), ata_read8( ATA_SECTORNUMBER_REG ) );
-}
-
-
-void ata_printStatus( void )
-{
-	ata_waitNotBusy();
-	printf_P( PSTR(" * ATA_STATUS_REG: 0x%X\n"), ata_read8( ATA_STATUS_REG ) );
+	printf_P( PSTR(" * ATA_DEVICEHEAD_REG: 0x%02X\n"), ata_read8( ATA_DEVICEHEAD_REG ) );
+	printf_P( PSTR(" * ATA_STATUS_REG: 0x%02X\n"), ata_read8( ATA_STATUS_REG ) );
+	printf_P( PSTR(" * ATA_ERROR_REG: 0x%02X\n"), ata_read8( ATA_ERROR_REG ) );
+	printf_P( PSTR(" * ATA_CYLINDERLOW_REG: 0x%02X\n"), ata_read8( ATA_CYLINDERLOW_REG ) );
+	printf_P( PSTR(" * ATA_CYLINDERHIGH_REG: 0x%02X\n"), ata_read8( ATA_CYLINDERHIGH_REG ) );
+	printf_P( PSTR(" * ATA_SECTORCOUNT_REG: 0x%02X\n"), ata_read8( ATA_SECTORCOUNT_REG ) );
+	printf_P( PSTR(" * ATA_SECTORNUMBER_REG: 0x%02X\n"), ata_read8( ATA_SECTORNUMBER_REG ) );
 }

@@ -91,8 +91,9 @@ void play( const atapi_trackMSF_t * trackList, uint8_t numTracks, int8_t firstTr
 	atapi_msf_t end;
 	lastNonAudioTrack( trackList, numTracks, firstTrackNum, &end );
 	if( !start )
-		start = &current;
-	atapi_playAudioMSF( start, &end );
+		atapi_playAudioMSF( &current, &end );
+	else
+		atapi_playAudioMSF( start, &end );
 }
 
 

@@ -52,7 +52,7 @@
 ////////////////////////////////////////////////////////////////
 // register bit definitions
 
-// initial cylindercount value on atapi devices
+/// initial cylindercount value on atapi devices
 #define ATAPI_MAGICNUMBER		0xEB14
 
 #define ATAPI_STATUS_BUSY		ATA_STATUS_BUSY
@@ -173,9 +173,9 @@ typedef struct
 typedef struct
 {
 	uint16_t generalConfig;
-	char serialNumber[21];
-	char firmwareRev[9];
-	char modelNr[41];
+	char serialNumber[ATA_IDENTIFYPACKETDEVICE_SERIALNUMBER_LEN+1];
+	char firmwareRev[ATA_IDENTIFYPACKETDEVICE_FIRMWAREREVISION_LEN+1];
+	char modelNr[ATA_IDENTIFYPACKETDEVICE_MODELNUMBER_LEN+1];
 	uint8_t capabilities;
 	uint8_t pioModeNr;
 } atapi_device_information_t;
@@ -200,10 +200,13 @@ bool atapi_isDataRequest( void );
 bool atapi_waitDataRequestTimeout( uint8_t timeout );
 bool atapi_waitDataRequest( void );
 bool atapi_waitNoDataRequest( void );
-bool atapi_writeCommandPacket( uint8_t command[12], uint16_t ioLength );
-bool atapi_writePacket( uint8_t * source, uint16_t bytecount );
-bool atapi_readPacket( uint8_t * destination, uint16_t bytecount );
-bool atapi_readPacketSkip( uint16_t wordcount );
+bool atapi_writeCommandPacket( const uint8_t command[12], uint16_t ioLength );
+bool atapi_writePacket( const uint8_t * source, uint16_t byteCount );
+bool atapi_readPacket( uint8_t * destination, uint16_t byteCount );
+bool atapi_readPacketSkip( uint16_t byteCount );
+bool atapi_writePacketWord( uint16_t source );
+bool atapi_readPacketWord( uint16_t * destination );
+bool atapi_readPacketWordSkip( void );
 bool atapi_requestSense( atapi_requestSense_t * sense );
 bool atapi_readTOCMSF( atapi_trackMSF_t * tracks, int8_t * numTracks, int8_t * firstTrack );
 bool atapi_startStopUnit( uint8_t loadEjectOperation );
