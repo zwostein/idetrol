@@ -3,7 +3,7 @@
  *
  * Copyright (c) 2009-2010 Frank Meyer - frank(at)fli4l.de
  *
- * $Id: irmp.h,v 1.39 2010/06/25 13:18:36 fm Exp $
+ * $Id: irmp.h,v 1.45 2011/01/18 13:02:15 fm Exp $
  *
  * ATMEGA88 @ 8 MHz
  *
@@ -21,6 +21,28 @@
 extern "C"
 {
 #endif
+
+/*---------------------------------------------------------------------------------------------------------------------------------------------------
+ * timing constants:
+ *---------------------------------------------------------------------------------------------------------------------------------------------------
+ */
+#define IRMP_TIMEOUT_TIME                       16500.0e-6                  // timeout after 16.5 ms darkness
+#define IRMP_TIMEOUT_TIME_MS                    16500L                      // timeout after 16.5 ms darkness
+
+#if IRMP_SUPPORT_NIKON_PROTOCOL == 1
+#define IRMP_TIMEOUT_NIKON_TIME                 29500.0e-6                  // 2nd timeout after 29.5 ms darkness (only for NIKON!)
+#define IRMP_TIMEOUT_NIKON_TIME_MS              29500L                      // 2nd timeout after 29.5 ms darkness
+typedef uint16_t    PAUSE_LEN;
+#define IRMP_TIMEOUT_NIKON_LEN                  (PAUSE_LEN)(F_INTERRUPTS * IRMP_TIMEOUT_NIKON_TIME + 0.5)
+#else
+#if (F_INTERRUPTS * IRMP_TIMEOUT_TIME_MS) / 1000000 >= 254
+typedef uint16_t    PAUSE_LEN;
+#else
+typedef uint8_t     PAUSE_LEN;
+#endif
+#endif
+
+#define IRMP_TIMEOUT_LEN                        (PAUSE_LEN)(F_INTERRUPTS * IRMP_TIMEOUT_TIME + 0.5)
 
 /*---------------------------------------------------------------------------------------------------------------------------------------------------
  * IR protocols
@@ -45,6 +67,9 @@ extern "C"
 #define IRMP_SIEMENS_PROTOCOL                   17              // Siemens, e.g. Gigaset
 #define IRMP_FDC_PROTOCOL                       18              // FDC keyboard
 #define IRMP_RCCAR_PROTOCOL                     19              // RC Car
+#define IRMP_JVC_PROTOCOL                       20              // JVC
+#define IRMP_RC6A_PROTOCOL                      21              // RC6A, e.g. Kathrein, XBOX
+#define IRMP_NIKON_PROTOCOL                     22              // Nikon
 
 // some flags of struct IRMP_PARAMETER:
 #define IRMP_PARAM_FLAG_IS_MANCHESTER           0x01
@@ -128,7 +153,8 @@ extern "C"
 #define KASEIKYO_PULSE_TIME                      423.0e-6                       //  525 usec pulse
 #define KASEIKYO_1_PAUSE_TIME                   1269.0e-6                       //  525 usec pause
 #define KASEIKYO_0_PAUSE_TIME                    423.0e-6                       // 1690 usec pause
-#define KASEIKYO_FRAME_REPEAT_PAUSE_TIME          45.0e-3                       // frame repeat after 45ms
+#define KASEIKYO_AUTO_REPETITION_PAUSE_TIME       74.0e-3                       // repetition after 74 ms
+#define KASEIKYO_FRAME_REPEAT_PAUSE_TIME          74.0e-3                       // frame repeat after 74 ms
 #define KASEIKYO_ADDRESS_OFFSET                  0                              // skip 0 bits
 #define KASEIKYO_ADDRESS_LEN                    16                              // read 16 address bits
 #define KASEIKYO_COMMAND_OFFSET                 28                              // skip 28 bits (16 manufacturer & 4 parity & 8 genre)
@@ -136,6 +162,7 @@ extern "C"
 #define KASEIKYO_COMPLETE_DATA_LEN              48                              // complete length
 #define KASEIKYO_STOP_BIT                       1                               // has stop bit
 #define KASEIKYO_LSB                            1                               // LSB...MSB?
+#define KASEIKYO_FRAMES                         2                               // KASEIKYO sends 1st frame 2 times
 #define KASEIKYO_FLAGS                          0                               // flags
 
 #define RECS80_START_BIT_PULSE_TIME              158.0e-6                       //  158 usec pulse
@@ -164,9 +191,9 @@ extern "C"
 #define RC5_LSB                                 0                               // MSB...LSB
 #define RC5_FLAGS                               IRMP_PARAM_FLAG_IS_MANCHESTER   // flags
 
-#define DENON_PULSE_TIME                        275.0e-6                        //  275 usec pulse
-#define DENON_1_PAUSE_TIME                      1900.0e-6                       // 1900 usec pause
-#define DENON_0_PAUSE_TIME                       775.0e-6                       //  775 usec pause
+#define DENON_PULSE_TIME                         310.0e-6                       //  310 usec pulse in practice,  275 in theory
+#define DENON_1_PAUSE_TIME                      1780.0e-6                       // 1780 usec pause in practice, 1900 in theory
+#define DENON_0_PAUSE_TIME                       745.0e-6                       //  745 usec pause in practice,  775 in theory
 #define DENON_FRAMES                            2                               // DENON sends each frame 2 times
 #define DENON_AUTO_REPETITION_PAUSE_TIME          65.0e-3                       // inverted repetition after 65ms
 #define DENON_FRAME_REPEAT_PAUSE_TIME             65.0e-3                       // frame repeat after 65ms
@@ -278,7 +305,7 @@ extern "C"
 #define SIEMENS_ADDRESS_OFFSET                  2                               // skip 2 start bits
 #define SIEMENS_ADDRESS_LEN                     12                              // read 12 address bits
 #define SIEMENS_COMMAND_OFFSET                  15                              // skip 15 bits (2 start bits + 12 address bits + 1 inverted bit)
-#define SIEMENS_COMMAND_LEN                     7                               // read 7 command bits
+#define SIEMENS_COMMAND_LEN                     8                               // read 7 + 1 command bits, last bit is only check bit.
 #define SIEMENS_COMPLETE_DATA_LEN               23                              // complete length
 #define SIEMENS_STOP_BIT                        0                               // has no stop bit
 #define SIEMENS_LSB                             0                               // MSB...LSB
@@ -314,7 +341,38 @@ extern "C"
 #define RCCAR_LSB                               1                               // LSB...MSB
 #define RCCAR_FLAGS                             0                               // flags
 
-#define AUTO_FRAME_REPETITION_TIME              50.0e-3                         // SIRCS/SAMSUNG32/NUBERT: automatic repetition after 25-50ms
+#define JVC_START_BIT_PULSE_TIME                9000.0e-6                       // 9000 usec pulse
+#define JVC_START_BIT_PAUSE_TIME                4500.0e-6                       // 4500 usec pause
+#define JVC_PULSE_TIME                           560.0e-6                       //  560 usec pulse
+#define JVC_1_PAUSE_TIME                        1690.0e-6                       // 1690 usec pause
+#define JVC_0_PAUSE_TIME                         560.0e-6                       //  560 usec pause
+#define JVC_FRAME_REPEAT_PAUSE_TIME               22.0e-3                       // frame repeat after 22ms
+#define JVC_ADDRESS_OFFSET                       0                              // skip 0 bits
+#define JVC_ADDRESS_LEN                          4                              // read 4 address bits
+#define JVC_COMMAND_OFFSET                       4                              // skip 4 bits
+#define JVC_COMMAND_LEN                         12                              // read 12 bits
+#define JVC_COMPLETE_DATA_LEN                   16                              // complete length
+#define JVC_STOP_BIT                            1                               // has stop bit
+#define JVC_LSB                                 1                               // LSB...MSB
+#define JVC_FLAGS                               0                               // flags
+
+#define NIKON_START_BIT_PULSE_TIME              2200.0e-6                       //  2200 usec pulse
+#define NIKON_START_BIT_PAUSE_TIME             27100.0e-6                       // 27100 usec pause
+#define NIKON_PULSE_TIME                         500.0e-6                       //   520 usec pulse
+#define NIKON_1_PAUSE_TIME                      3500.0e-6                       //  3500 usec pause
+#define NIKON_0_PAUSE_TIME                      1500.0e-6                       //  1500 usec pause
+#define NIKON_FRAME_REPEAT_PAUSE_TIME             60.0e-3                       // frame repeat after 60ms
+#define NIKON_ADDRESS_OFFSET                    0                               // skip 0 bits
+#define NIKON_ADDRESS_LEN                       0                               // read 0 address bits
+#define NIKON_COMMAND_OFFSET                    0                               // skip 0 bits
+#define NIKON_COMMAND_LEN                       2                               // read 2 bits
+#define NIKON_COMPLETE_DATA_LEN                 2                               // complete length
+#define NIKON_STOP_BIT                          1                               // has stop bit
+#define NIKON_LSB                               0                               // LSB...MSB
+#define NIKON_FLAGS                             0                               // flags
+
+#define AUTO_FRAME_REPETITION_TIME              80.0e-3                         // SIRCS/SAMSUNG32/NUBERT: automatic repetition after 25-50ms
+                                                                                // KASEIKYO: automatic repetition after 75ms
 
 #define TRUE                                    1
 #define FALSE                                   0

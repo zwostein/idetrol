@@ -39,6 +39,9 @@ char irmp_protocol_string_nokia[] PROGMEM = "Nokia";
 char irmp_protocol_string_siemens[] PROGMEM = "Siemens";
 char irmp_protocol_string_fdc[] PROGMEM = "FDC Keyboard";
 char irmp_protocol_string_rccar[] PROGMEM = "RC Car";
+char irmp_protocol_string_jvc[] PROGMEM = "JVC";
+char irmp_protocol_string_rc6a[] PROGMEM = "RC6A";
+char irmp_protocol_string_nikon[] PROGMEM = "Nikon";
 PGM_P irmp_protocol_strings[] PROGMEM =
 {
 	irmp_protocol_string_unknown,
@@ -60,7 +63,10 @@ PGM_P irmp_protocol_strings[] PROGMEM =
 	irmp_protocol_string_nokia,
 	irmp_protocol_string_siemens,
 	irmp_protocol_string_fdc,
-	irmp_protocol_string_rccar
+	irmp_protocol_string_rccar,
+	irmp_protocol_string_jvc,
+	irmp_protocol_string_rc6a,
+	irmp_protocol_string_nikon
 };
 
 
