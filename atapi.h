@@ -131,8 +131,9 @@
 ////////////////////////////////////////////////////////////////
 // data types
 
-typedef uint32_t atapi_lba_t;
+typedef uint32_t atapi_lba_t;	///< Logical Block Address Type
 
+/// Address in minutes, seconds and frames
 typedef struct
 {
 	uint8_t minutes;
@@ -140,6 +141,7 @@ typedef struct
 	uint8_t frames;
 } atapi_msf_t;
 
+/// Detailed error information
 typedef struct
 {
 	uint8_t errorCode;
@@ -148,6 +150,7 @@ typedef struct
 	uint8_t additionalSenseCodeQualifier;
 } atapi_requestSense_t;
 
+/// Subchannel data in MSF address format
 typedef struct
 {
 	uint8_t		audioStatus;
@@ -159,6 +162,7 @@ typedef struct
 	atapi_msf_t	relative;
 } atapi_readSubChannel_currentPositionMSF_t;
 
+/// Subchannel data in LBA address format
 typedef struct
 {
 	uint8_t		audioStatus;
@@ -170,6 +174,7 @@ typedef struct
 	atapi_lba_t	relative;
 } atapi_readSubChannel_currentPosition_t;
 
+/// Drive identification information
 typedef struct
 {
 	uint16_t generalConfig;
@@ -180,12 +185,14 @@ typedef struct
 	uint8_t pioModeNr;
 } atapi_device_information_t;
 
+/// Track information in MSF format
 typedef struct
 {
 	uint8_t qBitADRControl;
 	atapi_msf_t address;
 } atapi_trackMSF_t;
 
+/// Track information in LBA format
 typedef struct
 {
 	uint8_t qBitADRControl;
