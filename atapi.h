@@ -32,7 +32,13 @@
 #define __ATAPI_H__INCLUDED__
 
 
+#include "atapi_config.h"
 #include "ata.h"
+
+
+#if ATAPI_USE_MALLOC == 0 && ATAPI_USE_NON_MALLOC == 0
+#error Neither ATAPI_USE_MALLOC nor ATAPI_USE_NON_MALLOC is used!
+#endif
 
 
 ////////////////////////////////////////////////////////////////
@@ -52,7 +58,7 @@
 ////////////////////////////////////////////////////////////////
 // register bit definitions
 
-/// initial cylindercount value on atapi devices
+/// Initial cylindercount value on atapi devices.
 #define ATAPI_MAGICNUMBER		0xEB14
 
 #define ATAPI_STATUS_BUSY		ATA_STATUS_BUSY
@@ -74,7 +80,7 @@
 
 #define ATAPI_COMMAND_STARTSTOPUNIT	0x1B
 #define ATAPI_STARTSTOPUNIT_START	_BV(0)
-#define ATAPI_STARTSTOPUNIT_LOEJ	_BV(1)
+#define ATAPI_STARTSTOPUNIT_LOADEJECT	_BV(1)
 
 #define ATAPI_COMMAND_REQUESTSENSE	0x03
 #define ATAPI_SENSE_NONE		0x00
@@ -85,14 +91,16 @@
 #define ATAPI_SENSE_ILLEGALREQUEST	0x05
 #define ATAPI_SENSE_UNITATTENTION	0x06
 #define ATAPI_SENSE_DATAPROTECT		0x07
-#define ATAPI_SENSE_ABORTETCOMMAND	0x0B
+#define ATAPI_SENSE_ABORTEDCOMMAND	0x0B
 #define ATAPI_SENSE_MISCOMPARE		0x0E
-#define ATAPI_ASC_INVALIDCOMMAND	0x20
-#define ATAPI_ASC_INVALIDFIELD		0x24
 #define ATAPI_ASC_LOGICALDRIVENOTREADY	0x04
 #define ATAPI_ASC_NOREFERENCEPOSITION	0x06
+#define ATAPI_ASC_INVALIDCOMMAND	0x20
+#define ATAPI_ASC_INVALIDFIELD		0x24
 #define ATAPI_ASC_CANNOTREADMEDIUM	0x30
 #define ATAPI_ASC_MEDIUMNOTPRESENT	0x3A
+#define ATAPI_ASC_PLAYOPERATIONABORTED	0xB9
+#define ATAPI_ASC_LOSSOFSTREAMING	0xBF
 
 #define ATAPI_COMMAND_READSUBCHANNEL	0x42
 #define ATAPI_READSUBCHANNEL_DATAFORMAT_CURRENTPOSITION	0x01
@@ -104,11 +112,10 @@
 #define ATAPI_READSUBCHANNEL_AUDIOSTATUS_COMPLETED	0x13
 #define ATAPI_READSUBCHANNEL_AUDIOSTATUS_ERROR		0x14
 #define ATAPI_READSUBCHANNEL_AUDIOSTATUS_NOTPLAYING	0x15
-
-#define ATAPI_QFIELDADR_NOTSUPPLIED	0x00
-#define ATAPI_QFIELDADR_CURRENTPOSITION	0x10
-#define ATAPI_QFIELDADR_UPC		0x20
-#define ATAPI_QFIELDADR_ISRC		0x30
+#define ATAPI_QFIELDADR_NOTSUPPLIED		0x00
+#define ATAPI_QFIELDADR_CURRENTPOSITION		0x10
+#define ATAPI_QFIELDADR_UPC			0x20
+#define ATAPI_QFIELDADR_ISRC			0x30
 #define ATAPI_QFIELDCONTROL_PREEMPHASIS		_BV(0)
 #define ATAPI_QFIELDCONTROL_COPYPERMITTED	_BV(1)
 #define ATAPI_QFIELDCONTROL_DATATRACK		_BV(2)
@@ -117,6 +124,8 @@
 #define ATAPI_COMMAND_READTOC			0x43
 #define ATAPI_COMMAND_PLAYAUDIO			0x45
 #define ATAPI_COMMAND_PLAYAUDIOMSF		0x47
+#define ATAPI_COMMAND_PAUSERESUME		0x4B
+#define ATAPI_COMMAND_STOP			0x4E
 #define ATAPI_COMMAND_SCAN			0xBA
 #define ATAPI_COMMAND_SEEK			0x2B
 #define ATAPI_COMMAND_TESTUNITREADY		0x00
@@ -125,54 +134,89 @@
 ////////////////////////////////////////////////////////////////
 // other stuff
 
+/// ATAPI spec. defines a maximum of 99 tracks + 1 lead-out.
+#define ATAPI_MAX_TRACKS			100
+
 #define ATAPI_WAITDATAREQUEST_DEFAULT_TIMEOUT	128
 
 
 ////////////////////////////////////////////////////////////////
 // data types
 
-typedef uint32_t atapi_lba_t;	///< Logical Block Address Type
+#if ATAPI_USE_LBA
+typedef uint32_t atapi_lba_t;	///< Logical Block Address Type.
+#endif
 
-/// Address in minutes, seconds and frames
+/// Status of a play operation.
+/**
+* This field has one of the following values:
+* - \e ATAPI_READSUBCHANNEL_AUDIOSTATUS_NOTSUPPORTED
+* - \e ATAPI_READSUBCHANNEL_AUDIOSTATUS_PLAYING
+* - \e ATAPI_READSUBCHANNEL_AUDIOSTATUS_PAUSED
+* - \e ATAPI_READSUBCHANNEL_AUDIOSTATUS_COMPLETED
+* - \e ATAPI_READSUBCHANNEL_AUDIOSTATUS_ERROR
+* - \e ATAPI_READSUBCHANNEL_AUDIOSTATUS_NOTPLAYING
+* .
+**/
+typedef uint8_t atapi_audioStatus_t;
+
+/// ADR and control information.
+/**
+* The control information is in the low-nibble (bits 0-3). This may be any bit-combination of:
+* - \e ATAPI_QFIELDCONTROL_PREEMPHASIS
+* - \e ATAPI_QFIELDCONTROL_COPYPERMITTED
+* - \e ATAPI_QFIELDCONTROL_DATATRACK
+* - \e ATAPI_QFIELDCONTROL_FOURCHANNELAUDIO
+* .
+* The ADR code is in the high-nibble (bits 4-7) and has one of the following values:
+* - \e ATAPI_QFIELDADR_NOTSUPPLIED
+* - \e ATAPI_QFIELDADR_CURRENTPOSITION
+* - \e ATAPI_QFIELDADR_UPC
+* - \e ATAPI_QFIELDADR_ISRC
+* .
+**/
+typedef uint8_t atapi_qADRControl_t;
+
+/// Address in minutes, seconds and frames.
 typedef struct
 {
-	uint8_t minutes;
-	uint8_t seconds;
-	uint8_t frames;
+	uint8_t minutes;	///< Minutes from 0 to 99.
+	uint8_t seconds;	///< Seconds from 0 to 59.
+	uint8_t frames;		///< Frames from 0 to 74.
 } atapi_msf_t;
 
-/// Detailed error information
+/// Detailed error information.
 typedef struct
 {
-	uint8_t errorCode;
-	uint8_t senseKey;
-	uint8_t additionalSenseCode;
-	uint8_t additionalSenseCodeQualifier;
+	uint8_t errorCode;	///< 0x70 (current), 0x71 (deferred), 0x7F (vendor).
+	uint8_t senseKey;	///< 0x00 for a successful command, other values for indicate an error.
+	uint8_t additionalSenseCode;	///< ASC - More detailed information.
+	uint8_t additionalSenseCodeQualifier;	///< ASCQ Even more details.
 } atapi_requestSense_t;
 
 /// Subchannel data in MSF address format
 typedef struct
 {
-	uint8_t		audioStatus;
-	uint16_t	subChannelDataLength;
-	uint8_t		qBitADRControl;
-	uint8_t		track;
-	uint8_t		index;
-	atapi_msf_t	absolute;
-	atapi_msf_t	relative;
-} atapi_readSubChannel_currentPositionMSF_t;
+	atapi_audioStatus_t	audioStatus;	///< Current audio status information.
+	atapi_qADRControl_t	qADRControl;	///< Current ADR and control information.
+	int8_t		track;		///< Current track number from 1 to 99.
+	int8_t		index;		///< Index number in the current track.
+	atapi_msf_t	absolute;	///< Absolute position on CD.
+	atapi_msf_t	relative;	///< Relative position from beginning of the track.
+} atapi_readSubChannel_currentPosition_MSF_t;
 
+#if ATAPI_USE_LBA
 /// Subchannel data in LBA address format
 typedef struct
 {
-	uint8_t		audioStatus;
-	uint16_t	subChannelDataLength;
-	uint8_t		qBitADRControl;
-	uint8_t		track;
-	uint8_t		index;
-	atapi_lba_t	absolute;
-	atapi_lba_t	relative;
-} atapi_readSubChannel_currentPosition_t;
+	atapi_audioStatus_t	audioStatus;	///< Current audio status information.
+	atapi_qADRControl_t	qADRControl;	///< Current ADR and control information.
+	int8_t		track;		///< Current track number from 1 to 99.
+	int8_t		index;		///< Index number in the current track.
+	atapi_lba_t	absolute;	///< Absolute position on CD.
+	atapi_lba_t	relative;	///< Relative position from beginning of the track.
+} atapi_readSubChannel_currentPosition_LBA_t;
+#endif
 
 /// Drive identification information
 typedef struct
@@ -188,46 +232,119 @@ typedef struct
 /// Track information in MSF format
 typedef struct
 {
-	uint8_t qBitADRControl;
-	atapi_msf_t address;
-} atapi_trackMSF_t;
+	atapi_qADRControl_t qADRControl;	///< ADR and control information for this track.
+	atapi_msf_t address;			///< Starting address of this track.
+} atapi_track_MSF_t;
 
+#if ATAPI_USE_LBA
 /// Track information in LBA format
 typedef struct
 {
-	uint8_t qBitADRControl;
-	atapi_lba_t address;
-} atapi_track_t;
+	atapi_qADRControl_t qADRControl;	///< ADR and control information for this track.
+	atapi_lba_t address;			///< Starting address of this track.
+} atapi_track_LBA_t;
+#endif
 
 
 ////////////////////////////////////////////////////////////////
 // functions
 
-bool atapi_isDataRequest( void );
-bool atapi_waitDataRequestTimeout( uint8_t timeout );
-bool atapi_waitDataRequest( void );
-bool atapi_waitNoDataRequest( void );
-bool atapi_writeCommandPacket( const uint8_t command[12], uint16_t ioLength );
-bool atapi_writePacket( const uint8_t * source, uint16_t byteCount );
-bool atapi_readPacket( uint8_t * destination, uint16_t byteCount );
-bool atapi_readPacketSkip( uint16_t byteCount );
-bool atapi_writePacketWord( uint16_t source );
-bool atapi_readPacketWord( uint16_t * destination );
-bool atapi_readPacketWordSkip( void );
-bool atapi_requestSense( atapi_requestSense_t * sense );
-bool atapi_readTOCMSF( atapi_trackMSF_t * tracks, int8_t * numTracks, int8_t * firstTrack );
-bool atapi_startStopUnit( uint8_t loadEjectOperation );
-bool atapi_readSubChannel_currentPositionMSF( atapi_readSubChannel_currentPositionMSF_t * current );
-bool atapi_readSubChannel_currentPosition( atapi_readSubChannel_currentPosition_t * current );
-bool atapi_playAudioMSF( const atapi_msf_t * start, const atapi_msf_t * end );
-bool atapi_playAudio( const atapi_lba_t * start, uint16_t length );
-bool atapi_testUnitReady( void );
-bool atapi_scanMSF( atapi_msf_t * start, uint8_t reverse );
-bool atapi_seek( atapi_lba_t * address );
-bool atapi_waitReady( void );
-bool atapi_printError( void );
-bool atapi_identifyPacketDevice( atapi_device_information_t * info );
+/// Tries to initialize any connected ATAPI device.
 bool atapi_init( void );
+
+/// Prints current error/sense information from device.
+bool atapi_printError( void );
+
+/// Reads information from device.
+bool atapi_identifyPacketDevice( atapi_device_information_t * info );
+
+/// Reads current error/sense information.
+bool atapi_requestSense( atapi_requestSense_t * sense );
+
+/// Returns \e true if current device has loaded and initialized the medium.
+bool atapi_testUnitReady( void );
+
+/// Executes a start/stop/eject/load operation on device.
+bool atapi_startStopUnit( uint8_t operation );
+
+/// Pause or resume a play operation.
+bool atapi_pauseResume( bool resume );
+
+/// Stop a play/scan operation.
+bool atapi_stop( void );
+
+/// Fast-forward or fast-reverse operation.
+bool atapi_scan_track( uint8_t startTrack, bool reverse );
+
+/// Fast-forward or fast-reverse operation.
+bool atapi_scan_MSF( atapi_msf_t * start, bool reverse );
+
+/// Extracts sub-channel information of current track.
+bool atapi_readSubChannel_currentPosition_MSF( atapi_readSubChannel_currentPosition_MSF_t * current );
+
+/// Starts audio play operation.
+bool atapi_playAudio_MSF( const atapi_msf_t * start, const atapi_msf_t * end );
+
+#if ATAPI_USE_LBA
+/// Fast-forward or fast-reverse operation.
+bool atapi_scan_LBA( atapi_lba_t * start, bool reverse );
+
+/// Extracts sub-channel information of current track.
+bool atapi_readSubChannel_currentPosition_LBA( atapi_readSubChannel_currentPosition_LBA_t * current );
+
+/// Starts audio play operation.
+bool atapi_playAudio_LBA( const atapi_lba_t * start, uint16_t length );
+
+/// Change position to a logical block address.
+bool atapi_seek( atapi_lba_t * address );
+#endif // ATAPI_USE_LBA
+
+#if ATAPI_USE_MALLOC
+/// Reads the Table Of Contents from the current CD using MSF addresses. (\e malloc version)
+/**
+ * This function will dynamically allocate memory for all tracks on the CD.
+ * If returned pointer is not \e NULL, \e numtracks and \e firstTrack contain valid data, and the returned pointer to the allocated memory must be freed manually.
+ * \param numTracks Must point to a variable. If this function returns successful, \e numTracks is set to the actual number of tracks.
+ * \param firstTrack Must point to a variable. On successful execution, this variable contains the tracknumber of the first track in \e tracks.
+ * \returns The pointer to the allocated memory that contains the tracklist, or \e NULL.
+ **/
+atapi_track_MSF_t * atapi_readTOC_MSF_malloc( int8_t * numTracks, int8_t * firstTrack );
+#if ATAPI_USE_LBA
+/// Reads the Table Of Contents from the current CD using LBA addresses. (\e malloc version)
+/**
+ * This function will dynamically allocate memory for all tracks on the CD.
+ * If returned pointer is not \e NULL, \e numtracks and \e firstTrack contain valid data, and the returned pointer to the allocated memory must be freed manually.
+ * \param numTracks Must point to a variable. If this function returns successful, \e numTracks is set to the actual number of tracks.
+ * \param firstTrack Must point to a variable. On successful execution, this variable contains the tracknumber of the first track in \e tracks.
+ * \returns The pointer to the allocated memory that contains the tracklist, or \e NULL.
+ **/
+atapi_track_LBA_t * atapi_readTOC_LBA_malloc( int8_t * numTracks, int8_t * firstTrack );
+#endif // ATAPI_USE_LBA
+#endif // ATAPI_USE_NON_MALLOC
+
+#if ATAPI_USE_NON_MALLOC
+/// Reads the Table Of Contents from the current CD using MSF addresses. (non \e malloc version)
+/**
+ * \param tracks A pointer to an array of \e numTracks atapi_track_MSF_t elements.
+ * \param numTracks Must point to a variable containing the number of elements in \e tracks.
+ * If this function returns successful, \e numTracks will be set to the actual number of tracks.
+ * \param firstTrack Must point to a variable. On successful execution, this variable contains the tracknumber of the first track in \e tracks.
+ * \returns \e true on success.
+ **/
+bool atapi_readTOC_MSF( atapi_track_MSF_t * tracks, int8_t * numTracks, int8_t * firstTrack );
+#if ATAPI_USE_LBA
+/// Reads the Table Of Contents from the current CD using LBA addresses. (non \e malloc version)
+/**
+ * \param tracks A pointer to an array of \e numTracks atapi_track_MSF_t elements.
+ * \param numTracks Must point to a variable containing the number of elements in \e tracks.
+ * If this function returns successful, \e numTracks will be set to the actual number of tracks.
+ * \param firstTrack Must point to a variable. On successful execution, this variable contains the tracknumber of the first track in \e tracks.
+ * \returns \e true on success.
+ **/
+bool atapi_readTOC_LBA( atapi_track_LBA_t * tracks, int8_t * numTracks, int8_t * firstTrack );
+#endif // ATAPI_USE_LBA
+#endif // ATAPI_USE_NON_MALLOC
+
 
 #endif
 

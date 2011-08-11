@@ -35,7 +35,7 @@ SRC = main.c \
 	spi/spi.c \
 	ata.c \
 	atapi.c \
-	atapiPlayer.c
+	atapiplayer.c
 
 # List Assembler source files here.
 # Make them always end in a capital .S.  Files ending in a lowercase .s

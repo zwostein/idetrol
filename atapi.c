@@ -79,20 +79,6 @@ bool atapi_waitNoDataRequest( void )
 }
 
 
-bool atapi_writeCommandPacket( const uint8_t command[12], uint16_t ioLength )
-{
-	ioLength += 12;
-	if( !ata_waitNotBusy() )
-		return false;
-	ata_write8( ATA_FEATURES_REG, 0 );
-	ata_write8( ATAPI_BYTECOUNTLOW_REG, ioLength );
-	ata_write8( ATAPI_BYTECOUNTHIGH_REG, ioLength>>8 );
-	ata_write8( ATA_COMMAND_REG, ATA_COMMAND_PACKET );
-	atapi_writePacket( command, 12 );
-	return true;
-}
-
-
 bool atapi_writePacketWord( uint16_t source )
 {
 	if( atapi_waitDataRequest() )
@@ -204,22 +190,28 @@ bool atapi_readPacketString( char * destination, uint8_t charCount )
 }
 
 
+bool atapi_writeCommandPacket( const uint8_t command[12], uint16_t ioLength )
+{
+	ioLength += 12;
+	if( !ata_waitNotBusy() )
+		return false;
+	ata_write8( ATA_FEATURES_REG, 0 );
+	ata_write8( ATAPI_BYTECOUNTLOW_REG, ioLength );
+	ata_write8( ATAPI_BYTECOUNTHIGH_REG, ioLength>>8 );
+	ata_write8( ATA_COMMAND_REG, ATA_COMMAND_PACKET );
+	atapi_writePacket( command, 12 );
+	return true;
+}
+
+
 bool atapi_requestSense( atapi_requestSense_t * sense )
 {
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_REQUESTSENSE,
-		0,
-		0,
-		0,
-		14,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0
+		0,0,0,		// reserved
+		14,	// allocarion length
+		0,0,0,0,0,0,0	// reserved
 	};
 	if( !atapi_writeCommandPacket( packet, 14 ) )
 		return false;
@@ -236,23 +228,26 @@ bool atapi_requestSense( atapi_requestSense_t * sense )
 }
 
 
-bool atapi_readTOCMSF( atapi_trackMSF_t * tracks, int8_t * numTracks, int8_t * firstTrack )
+////////////////////////////////////////////////////////////////
+// atapi_readTOC_*
+
+bool atapi_readTOC_initiate( int8_t * numTracks, int8_t * firstTrack, bool msf )
 {
-	uint16_t ioLength = (*numTracks)*8+4;	// 4Bytes Header + TrackDescriptor each 8Bytes
+	uint16_t ioLength = ATAPI_MAX_TRACKS * 8 + 4;	// 4Bytes Header + TrackDescriptor each 8Bytes
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_READTOC,
-		0x02,	// MSF
-		0,
-		0,
-		0,
-		0,
-		0,	// starting track
-		ioLength>>8,	// allocation length
-		ioLength,	//
-		0,
-		0,
-		0
+		msf?0x02:0x00,	// Bit 1: MSF, others reserved
+		0,		// Bits 0 - 2: format, others reserved
+		0,	// reserved
+		0,	// reserved
+		0,	// reserved
+		0,	// starting track / session number
+		ioLength>>8,	// allocation length: MSB
+		ioLength,	// allocation length: LSB
+		0,	// Bits 6 & 7: Format, others reserved
+		0,	// reserved
+		0	// reserved
 	};
 	if( !atapi_writeCommandPacket( packet, ioLength ) )
 		return false;
@@ -260,75 +255,170 @@ bool atapi_readTOCMSF( atapi_trackMSF_t * tracks, int8_t * numTracks, int8_t * f
 	if( !atapi_readPacketWordSkip() )	// TOC data length
 		return false;
 
-	uint16_t data;	// first and last track number
-	if( !atapi_readPacketWord( &data ) )
+	uint16_t data;
+	if( !atapi_readPacketWord( &data ) )	// first and last track number
 		return false;
+	(*firstTrack) = data;			// fist track in low-byte ( 1 to 99 )
+	int8_t lastTrack = data >> 8;		// last track in high-byte ( excluding lead-out )
+	lastTrack++;				// last track including lead-out
 
-	(*firstTrack) = data;
-	int8_t lastTrack = data>>8;
-	if( lastTrack-(*firstTrack) >= (*numTracks) )
-		lastTrack = (*numTracks)+(*firstTrack)-2;
-	(*numTracks) = (lastTrack-(*firstTrack)) + 2;		// count from zero - include lead-out track
+	(*numTracks) = lastTrack - (*firstTrack) + 1;
 
-	for( uint8_t i=0; i<(*numTracks); i++ )
+	return true;
+}
+
+bool atapi_readTOC_MSF_receive( atapi_track_MSF_t * tracks, int8_t numTracks )
+{
+	uint16_t data;
+	for( int8_t i=0; i<numTracks; i++ )
 	{
-		if( !atapi_readPacketWord( &data ) )
+		if( !atapi_readPacketWord( &data ) )	// low-byte reserved, high-byte ADRControl
 			return false;
-		tracks[i].qBitADRControl = data >> 8;
+		tracks[i].qADRControl = data >> 8;
 
-		if( !atapi_readPacketWordSkip() )	// track number
+		if( !atapi_readPacketWordSkip() )	// skip track number
 			return false;
 
-		if( !atapi_readPacketWord( &data ) )
+		if( !atapi_readPacketWord( &data ) )	// low-byte reserved, high-byte minutes
 			return false;
 		tracks[i].address.minutes = data >> 8;
 
 		if( !atapi_readPacketWord( &data ) )
 			return false;
 		tracks[i].address.seconds = data;
-		tracks[i].address.frames = data>>8;
+		tracks[i].address.frames = data >> 8;
 	}
 	return true;
 }
 
+#if ATAPI_USE_LBA
+bool atapi_readTOC_LBA_receive( atapi_track_LBA_t * tracks, int8_t numTracks )
+{
+	uint16_t data;
+	for( int8_t i=0; i<numTracks; i++ )
+	{
+		if( !atapi_readPacketWord( &data ) )	// low-byte reserved, high-byte ADRControl
+			return false;
+		tracks[i].qADRControl = data >> 8;
 
-bool atapi_startStopUnit( uint8_t loadEjectOperation )
+		if( !atapi_readPacketWordSkip() )	// skip track number
+			return false;
+
+		if( !atapi_readPacketWord( &data ) )	// LBA MSB
+			return false;
+		tracks[i].address = ((uint32_t)data) << 16;
+
+		if( !atapi_readPacketWord( &data ) )	// LBA LSB
+			return false;
+		tracks[i].address |= data;
+	}
+	return true;
+}
+#endif
+
+#if ATAPI_USE_MALLOC
+atapi_track_MSF_t * atapi_readTOC_MSF_malloc( int8_t * numTracks, int8_t * firstTrack )
+{
+	if( !atapi_readTOC_initiate( numTracks, firstTrack, true ) )
+		return NULL;
+
+	atapi_track_MSF_t * tracks = malloc( (*numTracks) * sizeof(atapi_track_MSF_t) );
+	if( !tracks )
+		return NULL;
+
+	if( !atapi_readTOC_MSF_receive( tracks, *numTracks ) )
+	{
+		free( tracks );
+		return NULL;
+	}
+
+	return tracks;
+}
+#if ATAPI_USE_LBA
+atapi_track_LBA_t * atapi_readTOC_LBA_malloc( int8_t * numTracks, int8_t * firstTrack )
+{
+	if( !atapi_readTOC_initiate( numTracks, firstTrack, false ) )
+		return NULL;
+
+	atapi_track_LBA_t * tracks = malloc( (*numTracks) * sizeof(atapi_track_LBA_t) );
+	if( !tracks )
+		return NULL;
+
+	if( !atapi_readTOC_LBA_receive( tracks, *numTracks ) )
+	{
+		free( tracks );
+		return NULL;
+	}
+
+	return tracks;
+}
+#endif // ATAPI_USE_LBA
+#endif // ATAPI_USE_MALLOC
+
+#if ATAPI_USE_NON_MALLOC
+bool atapi_readTOC_MSF( atapi_track_MSF_t * tracks, int8_t * numTracks, int8_t * firstTrack )
+{
+	int8_t maxTracks = (*numTracks);
+
+	if( !atapi_readTOC_initiate( numTracks, firstTrack, true ) )
+		return false;
+
+	if( (*numTracks) > maxTracks )	// if not all tracks can be stored, abort
+		return false;
+
+	return atapi_readTOC_MSF_receive( tracks, *numTracks );
+}
+#if ATAPI_USE_LBA
+bool atapi_readTOC_LBA( atapi_track_LBA_t * tracks, int8_t * numTracks, int8_t * firstTrack )
+{
+	int8_t maxTracks = (*numTracks);
+
+	if( !atapi_readTOC_initiate( numTracks, firstTrack, false ) )
+		return false;
+
+	if( (*numTracks) > maxTracks )	// if not all tracks can be stored, abort
+		return false;
+
+	return atapi_readTOC_LBA_receive( tracks, *numTracks );
+}
+#endif // ATAPI_USE_LBA
+#endif // ATAPI_USE_MALLOC
+
+////////////////////////////////////////////////////////////////
+
+
+bool atapi_startStopUnit( uint8_t operation )
 {
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_STARTSTOPUNIT,
-		0x00,
-		0,
-		0,
-		loadEjectOperation & 0x03,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0
+		0x00,	// Bit 0: immediate, others reserved
+		0,	// reserved
+		0,	// reserved
+		operation & 0x03,	// Bit 0: start, Bit 1: load/eject, others reserved
+		0,0,0,0,0,0,0	// reserved
 	};
 	return atapi_writeCommandPacket( packet, 0 );
 }
 
 
-bool atapi_readSubChannel_currentPositionMSF( atapi_readSubChannel_currentPositionMSF_t * current )
+////////////////////////////////////////////////////////////////
+// atapi_readSubChannel_*
+
+bool atapi_readSubChannel_currentPosition_MSF( atapi_readSubChannel_currentPosition_MSF_t * current )
 {
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_READSUBCHANNEL,
-		0x02,	// MSF
-		0x40,	// SubQ
-		0x01,	// current position
-		0,
-		0,
+		0x02,	// Bit 1: MSF, others reserved
+		0x40,	// Bit 6: SubQ, others reserved
+		0x01,	// subchannel data format (current position)
+		0,	// reserved
+		0,	// reserved
 		0,	// track number
-		0,	// allocation length
-		16,	//
-		0,
-		0,
-		0
+		0,	// allocation length: MSB
+		16,	// allocation length: LSB
+		0,0,0	// reserved
 	};
 	if( !atapi_writeCommandPacket( packet, 16 ) )
 		return false;
@@ -338,8 +428,7 @@ bool atapi_readSubChannel_currentPositionMSF( atapi_readSubChannel_currentPositi
 		return false;
 
 	current->audioStatus = data[1];
-	current->subChannelDataLength = ((uint16_t*)data)[1];
-	current->qBitADRControl = data[5];
+	current->qADRControl = data[5];
 	current->track = data[6];
 	current->index = data[7];
 	current->absolute.minutes = data[9];
@@ -351,23 +440,21 @@ bool atapi_readSubChannel_currentPositionMSF( atapi_readSubChannel_currentPositi
 	return true;
 }
 
-
-bool atapi_readSubChannel_currentPosition( atapi_readSubChannel_currentPosition_t * current )
+#if ATAPI_USE_LBA
+bool atapi_readSubChannel_currentPosition_LBA( atapi_readSubChannel_currentPosition_LBA_t * current )
 {
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_READSUBCHANNEL,
-		0x00,	// MSF
-		0x40,	// SubQ
-		0x01,	// current position
-		0,
-		0,
+		0x00,	// Bit 1: MSF, others reserved
+		0x40,	// Bit 6: SubQ, others reserved
+		0x01,	// subchannel data format (current position)
+		0,	// reserved
+		0,	// reserved
 		0,	// track number
-		0,	// allocation length
-		16,	//
-		0,
-		0,
-		0
+		0,	// allocation length: MSB
+		16,	// allocation length: LSB
+		0,0,0	// reserved
 	};
 	if( !atapi_writeCommandPacket( packet, 16 ) )
 		return false;
@@ -377,52 +464,81 @@ bool atapi_readSubChannel_currentPosition( atapi_readSubChannel_currentPosition_
 		return false;
 
 	current->audioStatus = data[1];
-	current->subChannelDataLength = ((uint16_t*)data)[1];
+	current->qADRControl = data[5];
 	current->track = data[6];
 	current->index = data[7];
 	current->absolute = ((uint32_t*)data)[2];
 	current->relative = ((uint32_t*)data)[3];
 	return true;
 }
+#endif // ATAPI_USE_LBA
+
+////////////////////////////////////////////////////////////////
 
 
-bool atapi_playAudioMSF( const atapi_msf_t * start, const atapi_msf_t * end )
+////////////////////////////////////////////////////////////////
+// atapi_playAudio_*
+
+bool atapi_playAudio_MSF( const atapi_msf_t * start, const atapi_msf_t * end )
 {
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_PLAYAUDIOMSF,
-		0,
-		0,
-		start->minutes,
-		start->seconds,
-		start->frames,
-		end->minutes,
-		end->seconds,
-		end->frames,
-		0,
-		0,
-		0
+		0,	// reserved
+		0,	// reserved
+		start->minutes,	// MSF starting address
+		start->seconds,	// MSF starting address
+		start->frames,	// MSF starting address
+		end->minutes,	// MSF ending address
+		end->seconds,	// MSF ending address
+		end->frames,	// MSF ending address
+		0,0,0	// reserved
+	};
+	return atapi_writeCommandPacket( packet, 0 );
+}
+
+#if ATAPI_USE_LBA
+bool atapi_playAudio_LBA( const atapi_lba_t * start, uint16_t length )
+{
+	uint8_t packet[12] =
+	{
+		ATAPI_COMMAND_PLAYAUDIO,
+		0,	// reserved
+		(*start)>>24,	// LBA address
+		(*start)>>16,	// LBA address
+		(*start)>>8,	// LBA address
+		(*start),	// LBA address
+		0,	// reserved
+		length>>8,	// transfer length
+		length,		// transfer length
+		0,0,0	// reserved
+	};
+	return atapi_writeCommandPacket( packet, 0 );
+}
+#endif // ATAPI_USE_LBA
+
+////////////////////////////////////////////////////////////////
+
+
+bool atapi_stop( void )
+{
+	uint8_t packet[12] =
+	{
+		ATAPI_COMMAND_STOP,
+		0,0,0,0,0,0,0,0,0,0,0	// reserved
 	};
 	return atapi_writeCommandPacket( packet, 0 );
 }
 
 
-bool atapi_playAudio( const atapi_lba_t * start, uint16_t length )
+bool atapi_pauseResume( bool resume )
 {
 	uint8_t packet[12] =
 	{
-		ATAPI_COMMAND_PLAYAUDIO,
-		0,
-		(*start)>>24,
-		(*start)>>16,
-		(*start)>>8,
-		(*start),
-		0,
-		length>>8,
-		length,
-		0,
-		0,
-		0
+		ATAPI_COMMAND_PAUSERESUME,
+		0,0,0,0,0,0,0,	// reserved
+		resume?0x01:0x00,	// bit 0: resume, others reserved
+		0,0,0	// reserved
 	};
 	return atapi_writeCommandPacket( packet, 0 );
 }
@@ -433,17 +549,7 @@ bool atapi_testUnitReady( void )
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_TESTUNITREADY,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0,
-		0
+		0,0,0,0,0,0,0,0,0,0,0	// reserved
 	};
 	if( !atapi_writeCommandPacket( packet, 0 ) )
 		return false;
@@ -453,72 +559,107 @@ bool atapi_testUnitReady( void )
 }
 
 
-bool atapi_scanMSF( atapi_msf_t * start, uint8_t reverse )
+////////////////////////////////////////////////////////////////
+// atapi_scan_*
+
+bool atapi_scan_track( uint8_t startTrack, bool reverse )
 {
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_SCAN,
-		reverse?0x10:0x00,
-		0,
-		start->minutes,
-		start->seconds,
-		start->frames,
-		0,
-		0,
-		0,
-		0x40,	// type
-		0,
-		0
+		reverse?0x10:0x00,	// Bit 4: direction, others reserved
+		0,		// TNO address: reserved
+		0,		// TNO address: reserved
+		0,		// TNO address: reserved
+		startTrack,	// TNO address: track number
+		0,	// reserved
+		0,	// reserved
+		0,	// reserved
+		0x80,	// Bit 6 & 7: type (TNO)
+		0,	// reserved
+		0	// reserved
 	};
 	return atapi_writeCommandPacket( packet, 0 );
 }
 
+bool atapi_scan_MSF( atapi_msf_t * start, bool reverse )
+{
+	uint8_t packet[12] =
+	{
+		ATAPI_COMMAND_SCAN,
+		reverse?0x10:0x00,	// Bit 4: direction, others reserved
+		0,		// MSF address: reserved
+		start->minutes,	// MSF address
+		start->seconds,	// MSF address
+		start->frames,	// MSF address
+		0,	// reserved
+		0,	// reserved
+		0,	// reserved
+		0x40,	// Bit 6 & 7: type (MSF)
+		0,	// reserved
+		0	// reserved
+	};
+	return atapi_writeCommandPacket( packet, 0 );
+}
 
+#if ATAPI_USE_LBA
+bool atapi_scan_LBA( atapi_lba_t * start, bool reverse )
+{
+	uint8_t packet[12] =
+	{
+		ATAPI_COMMAND_SCAN,
+		reverse?0x10:0x00,	// Bit 4: direction, others reserved
+		(*start)>>24,	// LBA address
+		(*start)>>16,	// LBA address
+		(*start)>>8,	// LBA address
+		(*start),	// LBA address
+		0,	// reserved
+		0,	// reserved
+		0,	// reserved
+		0x00,	// Bit 6 & 7: type (LBA)
+		0,	// reserved
+		0	// reserved
+	};
+	return atapi_writeCommandPacket( packet, 0 );
+}
+#endif // ATAPI_USE_LBA
+
+////////////////////////////////////////////////////////////////
+
+
+#if ATAPI_USE_LBA
 bool atapi_seek( atapi_lba_t * address )
 {
 	uint8_t packet[12] =
 	{
 		ATAPI_COMMAND_SEEK,
-		0,
-		(*address)>>24,
-		(*address)>>16,
-		(*address)>>8,
-		(*address),
-		0,
-		0,
-		0,
-		0,
-		0,
-		0
+		0,	// reserved
+		(*address)>>24,	// LBA address
+		(*address)>>16,	// LBA address
+		(*address)>>8,	// LBA address
+		(*address),	// LBA address
+		0,0,0,0,0,0	// reserved
 	};
 	return atapi_writeCommandPacket( packet, 0 );
 }
+#endif // ATAPI_USE_LBA
 
 
 bool atapi_printError( void )
 {
-	uint8_t status;
-	ata_waitStatus( &status );
-	if( status & ATA_STATUS_ERROR )
+	static bool recursionStopper = false;
+	if( !recursionStopper )
 	{
-		static uint8_t recursionStopper=0;
-		if( recursionStopper==0 )
+		recursionStopper = true;
+		atapi_requestSense_t sense;
+		if( atapi_requestSense( &sense ) )
 		{
-			recursionStopper=1;
-			atapi_requestSense_t sense;
-			if( atapi_requestSense( &sense ) )
-			{
-				printf_P( PSTR("ErrorCode 0x02%X   SenseKey 0x02%X   ASC 0x02%X   ASCQ 0x02%X\n"), sense.errorCode, sense.senseKey, sense.additionalSenseCode, sense.additionalSenseCodeQualifier );
-			}
-			recursionStopper=0;
+			printf_P( PSTR("ErrorCode 0x%02X  SenseKey 0x%02X  ASC 0x%02X  ASCQ 0x%02X\n"), sense.errorCode, sense.senseKey, sense.additionalSenseCode, sense.additionalSenseCodeQualifier );
 		}
-		else
-		{
-			recursionStopper=0;
-			return false;
-		}
+		recursionStopper = false;
+		return true;
 	}
-	return true;
+	return false;
 }
 
 

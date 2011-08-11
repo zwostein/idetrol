@@ -230,14 +230,14 @@ bool ata_init( void )
 	setOutput( ATA_ADDRESS_DDR, ATA_A2 );
 	setOutput( ATA_ADDRESS_DDR, ATA_CS0 );
 	setOutput( ATA_ADDRESS_DDR, ATA_CS1 );
-	
+
 	// configure inputs
 	setInput( ATA_IRQ_DDR, ATA_IRQ );
-	
+
 	// configure bidirectional ports as input - for now
 	setAllInput( ATA_DATAL_DDR );
 	setAllInput( ATA_DATAH_DDR );
-	
+
 	ata_hardReset();
 	_delay_ms(2000);
 	ata_selectDevice(0);

@@ -32,11 +32,11 @@
 #define __ATA_H__INCLUDED__
 
 
+#include "ata_config.h"
+
 #include <avr/io.h>
 #include <stdint.h>
 #include <stdbool.h>
-
-#include "ata_config.h"
 
 
 ////////////////////////////////////////////////////////////////

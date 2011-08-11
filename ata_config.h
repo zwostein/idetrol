@@ -19,7 +19,7 @@
 
 
 /**
- * \defgroup ATA ATA-Interface
+ * \defgroup ATA_CONFIG ATA-Interface Configuration
  * \brief Low-Level ATA-Interface GPIO configuration.
  *
  * Defines which GPIO is connected to which ATA Pin.
