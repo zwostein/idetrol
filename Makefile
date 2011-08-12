@@ -143,8 +143,6 @@ EXTMEMOPTS =
 LDFLAGS = -Wl,-Map=$(TARGET).map,--cref
 LDFLAGS += $(EXTMEMOPTS)
 LDFLAGS += $(PRINTF_LIB) $(SCANF_LIB) $(MATH_LIB)
-# HACK:
-LDFLAGS += -T /usr/x86_64-pc-linux-gnu/avr/lib/ldscripts/avr5.x
 
 
 
