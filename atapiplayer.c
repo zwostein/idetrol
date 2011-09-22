@@ -219,6 +219,44 @@ bool atapiplayer_play( atapiplayer_t * player )
 }
 
 
+bool atapiplayer_playMSF( atapiplayer_t * player, const atapi_msf_t * address )
+{
+	if( !( player->status & ATAPIPLAYER_STATUS_TRAYCLOSED ) )	// tray not closed? close it
+		return atapi_startStopUnit( ATAPI_STARTSTOPUNIT_LOADEJECT | ATAPI_STARTSTOPUNIT_START );
+
+	if( !( player->status & ATAPIPLAYER_STATUS_CDINSERTED ) )	// tray closed but no cd inserted? abort
+		return false;
+
+	if( player->firstAudioTrack<0 || player->lastAudioTrack<0 )
+		return false;
+
+#if ATAPIPLAYER_SLIMMODE
+	if( !(player->status & ATAPIPLAYER_STATUS_PLAYING) )
+		atapi_startStopUnit( ATAPI_STARTSTOPUNIT_START );
+
+	if( !atapi_playAudio_MSF( address, &(player->tracks[player->lastAudioTrack+1].address) ) )
+		return false;
+
+	player->status |= ATAPIPLAYER_STATUS_PLAYING;
+	return true;
+
+#else
+
+	return atapi_playAudio_MSF( address, &(player->tracks[player->lastAudioTrack+1].address) );
+#endif
+}
+
+
+bool atapiplayer_playTrack( atapiplayer_t * player, int8_t trackIndex )
+{
+	if( player->firstAudioTrack<0 || player->lastAudioTrack<0 )
+		return false;
+	if( trackIndex < player->firstAudioTrack || trackIndex > player->lastAudioTrack )
+		return false;
+	return atapiplayer_playMSF( player, &(player->tracks[trackIndex].address) );
+}
+
+
 bool atapiplayer_stop( atapiplayer_t * player )
 {
 #if ATAPIPLAYER_SLIMMODE
@@ -361,7 +399,7 @@ bool atapiplayer_rewind( atapiplayer_t * player )
 }
 
 
-bool atapiplayer_eject( atapiplayer_t * player )
+bool atapiplayer_loadEject( atapiplayer_t * player )
 {
 	if( (player->status & ATAPIPLAYER_STATUS_TRAYCLOSED) )
 	{

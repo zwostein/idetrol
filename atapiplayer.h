@@ -80,6 +80,10 @@ bool atapiplayer_init( atapiplayer_t * player );
 bool atapiplayer_update( atapiplayer_t * player );
 /// On pause, this will resume to playback audio. If the player is stopped, the playback will begin at the first audio track.
 bool atapiplayer_play( atapiplayer_t * player );
+/// The playback will begin at the chosen MSF address.
+bool atapiplayer_playMSF( atapiplayer_t * player, const atapi_msf_t * address );
+/// The playback will begin at the chosen audio track.
+bool atapiplayer_playTrack( atapiplayer_t * player, int8_t trackIndex );
 /// The device will be stopped.
 bool atapiplayer_stop( atapiplayer_t * player );
 /// Pauses or resumes playback.
@@ -93,7 +97,7 @@ bool atapiplayer_forward( atapiplayer_t * player );
 /// Rewind.
 bool atapiplayer_rewind( atapiplayer_t * player );
 /// Load/Eject.
-bool atapiplayer_eject( atapiplayer_t * player );
+bool atapiplayer_loadEject( atapiplayer_t * player );
 
 
 #endif

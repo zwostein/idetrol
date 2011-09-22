@@ -32,7 +32,8 @@ SRC = main.c \
 	rs232/rs232.c \
 	rs232/stdiowrap.c \
 	irmp/irmp.c \
-	spi/spi.c \
+	spi.c \
+	spi_idetrol_slave.c \
 	ata.c \
 	atapi.c \
 	atapiplayer.c

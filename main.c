@@ -1,12 +1,13 @@
 #include "ata.h"
 #include "atapi.h"
 #include "atapiplayer.h"
+#include "spi_idetrol_slave.h"
 
 #include "rs232/rs232.h"
 #include "rs232/stdiowrap.h"
 #include "irmp/irmp.h"
 #include "irmp/irmpconfig.h"
-#include "spi/spi.h"
+#include "spi.h"
 #include "util.h"
 
 #include <avr/io.h>
@@ -138,6 +139,8 @@ int main( void )
 	wdt_disable();
 	jtag_disable();
 	rs232_init( 9600, 0 );
+	spi_init( SPI_HALFSPEED | SPI_EIGHTHSPEED );
+	spi_idetrol_slave_init( &player );
 	irmp_init();
 	timer1_init();
 	timer2_init();
@@ -166,6 +169,7 @@ int main( void )
 
 	while( true )
 	{
+		spi_idetrol_slave_update();
 		if( updateFlag )
 		{
 			atapiplayer_update( &player );
@@ -200,7 +204,7 @@ int main( void )
 						break;
 					case 55:
 						printf_P( PSTR("\nLoad/Eject\n") );
-						atapiplayer_eject( &player );
+						atapiplayer_loadEject( &player );
 						break;
 				}
 			}
